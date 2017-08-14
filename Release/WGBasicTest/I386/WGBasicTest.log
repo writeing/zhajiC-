@@ -1,0 +1,9 @@
+﻿  WGBasicTest.cpp
+WGBasicTest.cpp(679): warning C4806: “&”: 不安全操作: 从类型“bool”提升到类型“int”的值不能等于给定的常量
+WGBasicTest.cpp(679): warning C4554: “&”: 检查运算符优先级可能存在的错误；使用圆括号阐明优先级
+WGBasicTest.cpp(755): warning C4101: “recordIndexGet”: 未引用的局部变量
+WGBasicTest.cpp(853): warning C4018: “<”: 有符号/无符号不匹配
+  正在生成代码
+f:\wxccode\wgcontroller32_vc\wgbasictest.cpp(934): warning C4715: “zht_AddtoWhitelist”: 不是所有的控件路径都返回值
+  已完成代码的生成
+  WGBasicTest.vcxproj -> F:\wxccode\WGController32_VC\.\WGBasicTest.exe
