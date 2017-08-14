@@ -38,7 +38,7 @@
 #include <stdio.h>
 #include <fstream>
 
-#include "zht_WGbacic.h"
+#include "zht.h"
 class WGPacketShort {				//短报文协议
 public:
 	const static unsigned int	 WGPacketSize = 64;			    //报文长度
@@ -169,10 +169,10 @@ void back(int nID, int eventType, void* param)
 int ACE_TMAIN (int, ACE_TCHAR *[]) //主程序口
 {
 	int ret =0;
-	int SN = zht_InitPort(1, 60000, 9600, "192.168.1.121");
+	int SN = zht_InitPort(1, 60000, 9600, "192.168.1.102");
 	zht_SetTime(SN, 1, 12, 11, 23, 11, 56, 32, 1);
 	zht_AddtoWhitelist(SN, 1, (char *)"0001254545;9632145690;");
-	zht_SetCallbackAddr(SN, 1, back,"192.168.1.121");
+	zht_SetCallbackAddr(SN, 1, back,"192.168.1.102");
 
 	//int sn =0;
 	//cout<<("请输入控制器SN(9位数):  ");
@@ -392,9 +392,12 @@ public:
 	ACE_SOCK_CODgram udp;
 	void setAddr()
 	{
-		controller_addr.set_address(controlIP,strlen(controlIP));
-		controller_addr.set_port_number(controlPort);
-		if (0 != udp.open(controller_addr))
+		ACE_INET_Addr controller_addr_t(controlPort,controlIP);
+		//controller_addr.set_addr(controlIP,strlen(controlIP));
+		cout << controlIP << endl;
+		cout << strlen(controlIP) << endl;
+		//controller_addr.set_port_number(controlPort);
+		if (0 != udp.open(controller_addr_t))
 		{
 			//请输入有效IP			
 			cout << "请输入有效IP" << endl;
@@ -849,12 +852,14 @@ int *arrayIndex;
 void getIDCardIndex(char *data)
 {
 	int i = 0;
-	int j = 0;
+	int j = 0;		
+	arrayIndex[i++] = -1;
 	while(j < strlen(data))
 	{
 		if (data[j] == ';')
 		{			
 			arrayIndex[i++] = j;
+			cout << j << endl;
 		}
 		j++;
 	}	
@@ -862,19 +867,24 @@ void getIDCardIndex(char *data)
 }
 int getIDforCard(char *data, int index)
 {
-	char temp[10];
+	char temp[10] = {0};
 	int dataIndex = arrayIndex[index];
-	int len = 0;
-	if(arrayIndex[index+1] != 0)
-		len = arrayIndex[index + 1] - arrayIndex[index] - 1;	
-	strncat(temp, &data[dataIndex], len);
+	int len = 10;
+	if(arrayIndex[index+1] == 0)
+		return 0;
+		//len = arrayIndex[index + 1] - arrayIndex[index] - 1;	
+	cout << len << endl;
+	//memset(temp,'\0',10);
+	strncat(temp, &data[dataIndex+1], len);
+	cout << temp << endl;
+	cout << atoi(temp) << endl;
 	return atoi(temp);
 }
 int zht_AddtoWhitelist(int hComm, int id, char *cardid)
 {
 	int ret = 0;
 	int success = 0;  //0 失败, 1表示成功  
-	if ((id > 10 || id < 0) || MC[id].ConnectFlag == 0 || MC[id].SN != hComm)
+	if ((id > 10 || id < 0) || MC[id].ConnectFlag == 0 || MC[id].SN != hComm || strlen(cardid) < 10)
 	{
 		return -1;
 	}
@@ -882,9 +892,10 @@ int zht_AddtoWhitelist(int hComm, int id, char *cardid)
 
 	int cardNOOfPrivilege = 0;
 	int index = 0;
-	arrayIndex = (int *)calloc(int(strlen(cardid) / 10), sizeof(int));
-	memset(arrayIndex, 0, sizeof(int)*(strlen(cardid) / 10));
+	arrayIndex = new int[int(strlen(cardid) / 11) + 1 ];	
+	memset(arrayIndex, 0, sizeof(int)*(strlen(cardid) / 11) + 1 );
 	getIDCardIndex(cardid);
+
 	while(1)
 	{
 		cardNOOfPrivilege = getIDforCard(cardid, index++);
@@ -930,7 +941,7 @@ int zht_AddtoWhitelist(int hComm, int id, char *cardid)
 			}
 		}
 	}
-	free(arrayIndex);
+	delete[] arrayIndex;
 }
 /*
 int testBasicFunction(char *ControllerIP, unsigned int controllerSN)  //基本功能测试
