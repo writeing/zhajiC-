@@ -38,7 +38,7 @@
 #include <stdio.h>
 #include <fstream>
 
-#include "zht.h"
+#include "zht_WGbacic.h"
 class WGPacketShort {				//短报文协议
 public:
 	const static unsigned int	 WGPacketSize = 64;			    //报文长度
@@ -147,67 +147,11 @@ int WatchingServerRuning (char *watchServerIP,int watchServerPort);   //2013-11-
 
 #include<iostream>
 using namespace std;
-
+#include <windows.h>
 
 //typedef void(*FUNPTR_CALLBACK)(int nID, int eventType, void* param);
 
-void back(int nID, int eventType, void* param)
-{
-	if (eventType == 1)
-	{
-		log("jinlaile zheshi eventtype == 1");
-	}
-	log((char *)param);
-}
-	//本案例未作搜索控制器  及 设置IP的工作  (直接由IP设置工具来完成)
-	//本案例中测试说明
-	//控制器SN  = 422101164
-	//控制器IP  = 192.168.168.123
-	//电脑  IP  = 192.168.168.101
-	//用于作为接收服务器的IP (本电脑IP 192.168.168.101), 接收服务器端口 (61005)
 
-int ACE_TMAIN (int, ACE_TCHAR *[]) //主程序口
-{
-	int ret =0;
-	int SN = zht_InitPort(1, 60000, 9600, "192.168.1.102");
-	zht_SetTime(SN, 1, 12, 11, 23, 11, 56, 32, 1);
-	zht_AddtoWhitelist(SN, 1, (char *)"0001254545;9632145690;");
-	zht_SetCallbackAddr(SN, 1, back,"192.168.1.102");
-
-	//int sn =0;
-	//cout<<("请输入控制器SN(9位数):  ");
-	//cin>>sn;;
-	//
-	//char ip[32];
-	////log("请输入控制器IP:");
-	//cout<< ("请输入控制器IP:  ");
-	//cin >>ip;
-	//	
-	//ret = testBasicFunction(ip,sn); //基本功能测试
-	//if (ret !=1)
-	//{
-	//  log("基本功能测试失败, 按 X 回车键退出...");
-	//  char stop;
-	//  cin >>stop;
-	//  return 0;
- //   }
-	//
-	////接收服务器测试
-	//char watchServerIP[32]; // = "192.168.168.101";
-	//cout<< ("请输入接收服务器的IP:  ");
-	//cin >>watchServerIP;
- //   int  watchServerPort = 61005;
-	////cout<<("请输入接收服务器端口:  ");
-	////cin>>watchServerPort;;
-
-	//ret = testWatchingServer(ip,sn,watchServerIP, watchServerPort); //接收服务器设置
-
-	//ret = WatchingServerRuning(watchServerIP, watchServerPort); //服务器运行....
-	//
-	log("测试结束, 按回车键退出...");
-	getchar();
-	return 1;
-}
 
 char* RecordDetails[] =
         {
@@ -388,20 +332,27 @@ public:
 	int ConnectFlag;   // 1 connect 0 close
 	FUNPTR_CALLBACK fbackcall;
 	char localIP[16];
-	ACE_INET_Addr controller_addr;
+	//ACE_INET_Addr controller_addr;
 	ACE_SOCK_CODgram udp;
+
+	//ACE_INET_Addr server_addr(static_cast<u_short> (watchServerPort), watchServerIP);
+	ACE_SOCK_Dgram_Bcast serUdp;//(server_addr);
 	void setAddr()
 	{
-		ACE_INET_Addr controller_addr_t(controlPort,controlIP);
-		//controller_addr.set_addr(controlIP,strlen(controlIP));
+		ACE_INET_Addr controller_addr(controlPort,controlIP);
+		///*controller_addr.set_address(controlIP,strlen(controlIP));
+		//*/controller_addr.set_port_number(controlPort);
 		cout << controlIP << endl;
-		cout << strlen(controlIP) << endl;
-		//controller_addr.set_port_number(controlPort);
-		if (0 != udp.open(controller_addr_t))
+		cout << controlPort << endl;
+		if (0 != udp.open(controller_addr))
 		{
 			//请输入有效IP			
 			cout << "请输入有效IP" << endl;
 		}
+	}
+	void setSerUdp(ACE_SOCK_Dgram_Bcast udp)
+	{
+		serUdp = udp;
 	}
 };
 ControlInfo MC[20];
@@ -432,6 +383,7 @@ long getSnForControl(WGPacketShort pkt,int id)
 
 	pkt.Reset();
 	pkt.functionID = 0x94;
+
 	ret = pkt.run(MC[id].udp);
 	log("获取设备号...");
 	if (ret > 0)
@@ -441,7 +393,6 @@ long getSnForControl(WGPacketShort pkt,int id)
 		//get sn
 	}
 	return controllerSN;
-
 }
 //ControllerIP 控制器IP地址
 //controllerSN 控制器序列号
@@ -456,12 +407,13 @@ int zht_InitPort(int id, int iPort, int gPort, char* ControllerIP)
 	}
 	MC[id].pkt.ControllerPort = gPort;
 	MC[id].controlPort = gPort;
+	cout << MC[id].controlPort << endl;
 	memcpy(MC[id].controlIP, ControllerIP, strlen(ControllerIP));
 	MC[id].setAddr();
-	controllerSN = getSnForControl(MC[id].pkt,id);
+	controllerSN = getSnForControl(MC[id].pkt,id);//223209404
 	if (controllerSN == 0)
 	{
-		//return -1;
+		return -1;
 	}
 	MC[id].pkt.iDevSn = controllerSN;
 
@@ -472,18 +424,21 @@ int zht_InitPort(int id, int iPort, int gPort, char* ControllerIP)
 	MC[id].ConnectFlag = 1;
 	return controllerSN;
 }
-int zht_ClosePort(int controllerSN, int id)
+int zht_ClosePort(int hComm, int id)
 {
 	if (id > 10 || id < 0)
 	{
 		return -1;
 	}
-	if (MC[id].SN != controllerSN)
+	if (MC[id].SN != hComm)
 	{
 		return -1;
 	}
 	MC[id].ConnectFlag = 0;  //close	
-	MC[id].udp.close();
+	int aa = MC[id].udp.close();	
+	int bb = MC[id].serUdp.close();	
+	cout << aa << "bb" << bb << endl;
+	cout << "关闭完成" << endl;
 	return 0;
 }
 int zht_SetTime(int hComm, int id, int nYear, int nMonth, int nDay, int nHour, int nMinute, int nSecond, int nWeekDay)
@@ -638,6 +593,7 @@ int setRevIpandRevPort(WGPacketShort pkt , int id)  //接收服务器测试 -- 设置
 	//pkt.data[3] = 101; 
 	int watchServerPort = MC[id].localPort;
 	char *watchServerIP = MC[id].localIP;
+
 	ACE_INET_Addr watchServer_addr(watchServerPort, watchServerIP); //端口  IP地址
 	unsigned int iwatchServerIPInfo = watchServer_addr.get_ip_address();
 	pkt.data[0] = (iwatchServerIPInfo >> 24) & 0xff;
@@ -649,7 +605,9 @@ int setRevIpandRevPort(WGPacketShort pkt , int id)  //接收服务器测试 -- 设置
 	//接收服务器的端口: 61005
 	pkt.data[4] = (watchServerPort & 0xff);
 	pkt.data[5] = (watchServerPort >> 8) & 0xff;
-
+	cout << "服务器端口是:" << watchServerPort << endl;
+	unsigned char lPort = pkt.data[4];
+	unsigned char hPort = pkt.data[5];
 	//每隔5秒发送一次: 05 (定时上传信息的周期为5秒 [正常运行时每隔5秒发送一次  有刷卡时立即发送])
 	pkt.data[6] = 5;
 
@@ -679,7 +637,7 @@ int setRevIpandRevPort(WGPacketShort pkt , int id)  //接收服务器测试 -- 设置
 	{
 		if (((iwatchServerIPInfo >> 24) & 0xff) == pkt.recv[8] && ((iwatchServerIPInfo >> 16) & 0xff) == pkt.recv[9] && ((iwatchServerIPInfo >> 8) & 0xff) == pkt.recv[10] && ((iwatchServerIPInfo) & 0xff) == pkt.recv[11])
 		{
-			if (pkt.recv[12] == (watchServerPort & 0xff) && pkt.recv[13] == (watchServerPort >> 8) & 0xff)
+			if (pkt.recv[12] == lPort && pkt.recv[13] == hPort)
 			{
 				log("1.19 读取接收服务器的IP和端口 	 成功...");
 				success = 1;
@@ -695,15 +653,17 @@ void toJson(char *root, char *key, char *value, int flag)
 {
 	char json[100];
 	char *begin = "[{";
-	char* temp = "}]";
+	char *temp = "}]";
 	char* temp_1 = "\"";
 	char* temp_2 = ":";
 	char* temp_3 = ",";
 	if (strlen(root) == 0)
 	{
+		cout << "root" << root << endl;
 		strcat(root, begin);
 	}
 	//组合一个dict
+	memset(json,'\0',100);
 	strcat(json, temp_1);  //"
 	strcat(json, key);  //key
 	strcat(json, temp_1);  //"
@@ -720,22 +680,13 @@ void toJson(char *root, char *key, char *value, int flag)
 		strcat(json, temp);
 	}
 	strcat(root, json);  //"
-	cout << "toJson=" << root << endl;
-	/*_itoa(count, json, 10);
-	strcat(result, temp);
-	strcat(result, ":");
-	strcat(result, temp_1);
-	strcat(result, json);
-	strcat(result, temp_1);
-	strcat(result, temp_2);*/
-	//cout<<"toJson="<<result<<endl;
-
 }
 int zht_WatchingServerRuning(char *watchServerIP, int watchServerPort,int id)
 {
 	//注意防火墙 要允许此端口的所有包进入才行
 	ACE_INET_Addr server_addr(static_cast<u_short> (watchServerPort), watchServerIP);
 	ACE_SOCK_Dgram_Bcast udp(server_addr);
+	MC[id].setSerUdp(udp);
 	unsigned char buff[WGPacketShort::WGPacketSize];
 	size_t buflen = sizeof(buff);
 	ssize_t recv_cnt;
@@ -744,6 +695,7 @@ int zht_WatchingServerRuning(char *watchServerIP, int watchServerPort,int id)
 	char root[200] = { 0 };
 	memset(root, '\0', 200);
 	char temp[10];
+	int index = 0;
 	while (true)
 	{
 		ACE_INET_Addr any_addr;
@@ -768,7 +720,11 @@ int zht_WatchingServerRuning(char *watchServerIP, int watchServerPort,int id)
 					*/
 					//接收到数据，根据ID值进行返回
 					memset(root, '\0', 200);
-
+					index ++;
+					if(index == 10)
+					{
+						zht_ClosePort(MC[id].SN, 1);
+					}
 					//TIME
 					char controllerTime[] = "2000.01.01 00:00:00"; //控制器当前时间
 					sprintf(controllerTime, "20%02X.%02X.%02X %02X:%02X:%02X",
@@ -859,7 +815,7 @@ void getIDCardIndex(char *data)
 		if (data[j] == ';')
 		{			
 			arrayIndex[i++] = j;
-			cout << j << endl;
+			log("whitet list index = ", j);
 		}
 		j++;
 	}	
@@ -867,17 +823,15 @@ void getIDCardIndex(char *data)
 }
 int getIDforCard(char *data, int index)
 {
-	char temp[10] = {0};
+	char temp[12] = {0};
 	int dataIndex = arrayIndex[index];
 	int len = 10;
 	if(arrayIndex[index+1] == 0)
 		return 0;
 		//len = arrayIndex[index + 1] - arrayIndex[index] - 1;	
-	cout << len << endl;
 	//memset(temp,'\0',10);
 	strncat(temp, &data[dataIndex+1], len);
-	cout << temp << endl;
-	cout << atoi(temp) << endl;
+	log("whitet num = ", atoi(temp));
 	return atoi(temp);
 }
 int zht_AddtoWhitelist(int hComm, int id, char *cardid)
@@ -940,8 +894,106 @@ int zht_AddtoWhitelist(int hComm, int id, char *cardid)
 				success = 1;
 			}
 		}
+		if(success == 0)
+		{
+			break;
+		}
 	}
 	delete[] arrayIndex;
+	if(success == 1)
+	{
+		return 0;
+	}
+	else
+	{
+		return -1;
+	}
+}
+
+
+void back(int nID, int eventType, void* param)
+{
+	if (eventType == 1)
+	{
+		log("jinlaile zheshi eventtype == 1");
+	}
+	log((char *)param);
+}
+void createBackcall()
+{
+	char localip[32] = "192.168.121.201";
+	zht_SetCallbackAddr(MC[1].SN, 1, back, localip);
+}
+	//本案例未作搜索控制器  及 设置IP的工作  (直接由IP设置工具来完成)
+	//本案例中测试说明
+	//控制器SN  = 422101164
+	//控制器IP  = 192.168.168.123
+	//电脑  IP  = 192.168.168.101
+	//用于作为接收服务器的IP (本电脑IP 192.168.168.101), 接收服务器端口 (61005)
+
+int ACE_TMAIN (int, ACE_TCHAR *[]) //主程序口
+{
+	int ret =0;
+	char ip[32] = "192.168.121.150";
+	
+	////log("请输入控制器IP:");
+	//cout << ("请输入控制器IP:  ");
+	//cin >> ip;
+	int port = 60000;
+	////log("请输入控制器IP:");
+	//cout << ("请输入控制器port:  ");
+	//cin >> port;
+	int SN = zht_InitPort(1, 61000, port, ip);	
+	HANDLE h; //线程句柄
+    h = CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)createBackcall,NULL,1,0); //创建子线程
+    ResumeThread(h);  //启动子线程
+
+    if (ret != 0)
+    {
+        cout << "pthread_create error: error_code=" << ret << endl;
+    }
+	getchar();
+	zht_SetTime(SN, 1, 12, 11, 23, 12, 58, 32, 1);
+	zht_AddtoWhitelist(SN, 1, (char *)"0001254545;9632145690;9632145190;9232145690;0632145690;1632145690;");
+	//zht_SetCallbackAddr(SN, 1, back, localip);
+	////log("请输入控制器IP:");
+	//cout << ("请输入控制器IP:  ");
+	//cin >> localip;
+	getchar();
+	zht_ClosePort(SN, 1);
+	//int sn =0;
+	//cout<<("请输入控制器SN(9位数):  ");
+	//cin>>sn;;
+	//
+	//char ip[32];
+	////log("请输入控制器IP:");
+	//cout<< ("请输入控制器IP:  ");
+	//cin >>ip;
+	//	
+	//ret = testBasicFunction(ip,sn); //基本功能测试
+	//if (ret !=1)
+	//{
+	//  log("基本功能测试失败, 按 X 回车键退出...");
+	//  char stop;
+	//  cin >>stop;
+	//  return 0;
+ //   }
+	//
+	////接收服务器测试
+	//char watchServerIP[32]; // = "192.168.168.101";
+	//cout<< ("请输入接收服务器的IP:  ");
+	//cin >>watchServerIP;
+ //   int  watchServerPort = 61005;
+	////cout<<("请输入接收服务器端口:  ");
+	////cin>>watchServerPort;;
+
+	//ret = testWatchingServer(ip,sn,watchServerIP, watchServerPort); //接收服务器设置
+
+	//ret = WatchingServerRuning(watchServerIP, watchServerPort); //服务器运行....
+	//
+	log("测试结束, 按回车键退出...");
+	getchar();
+	return 1;
 }
 /*
 int testBasicFunction(char *ControllerIP, unsigned int controllerSN)  //基本功能测试
